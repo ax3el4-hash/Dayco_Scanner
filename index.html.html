@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DAYCO Scanner">
+<meta name="theme-color" content="#1a1f2e">
+<title>DAYCO Scanner</title>
+<style>
+  :root {
+    --bg:     #1a1f2e;
+    --bg2:    #222838;
+    --bg3:    #2c3347;
+    --border: #3a4260;
+    --text:   #e8eaf0;
+    --muted:  #7a85a0;
+    --accent: #4a7cf4;
+    --accentH:#3a6ae0;
+    --accentL:#d6e2fd;
+    --green:  #22c55e;
+    --red:    #ef4444;
+    --orange: #f59e0b;
+    --mono:   'Courier New', monospace;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+
+  /* HEADER */
+  .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-mark{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .logo-mark svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2}
+  .logo-text{font-size:16px;font-weight:700;letter-spacing:1.5px;color:var(--text)}
+  .logo-sub{font-size:10px;color:var(--muted);letter-spacing:0.5px}
+  .auth-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .auth-btn.connected{background:var(--bg3);color:var(--green);border:1px solid var(--green);font-size:12px}
+
+  /* TABS */
+  .tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border)}
+  .tab{flex:1;padding:12px 4px;text-align:center;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+  /* PAGES */
+  .page{display:none;padding:16px}
+  .page.active{display:block}
+
+  /* CAMERA */
+  .camera-box{background:var(--bg2);border:1.5px dashed var(--border);border-radius:14px;overflow:hidden;aspect-ratio:4/3;position:relative;margin-bottom:12px}
+  .camera-box video{width:100%;height:100%;object-fit:cover}
+  .camera-box canvas{display:none}
+  .camera-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted)}
+  .camera-placeholder svg{width:40px;height:40px;opacity:.35}
+  .scan-overlay{position:absolute;inset:0;pointer-events:none}
+  .scan-line{position:absolute;left:8%;right:8%;height:2px;background:var(--accent);opacity:.9;box-shadow:0 0 10px var(--accent);animation:scanAnim 2s linear infinite;top:20%}
+  @keyframes scanAnim{0%{top:18%}50%{top:78%}100%{top:18%}}
+  .corner{position:absolute;width:22px;height:22px;border-color:var(--accent);border-style:solid;opacity:.9}
+  .corner-tl{top:10%;left:6%;border-width:2px 0 0 2px;border-radius:3px 0 0 0}
+  .corner-tr{top:10%;right:6%;border-width:2px 2px 0 0;border-radius:0 3px 0 0}
+  .corner-bl{bottom:10%;left:6%;border-width:0 0 2px 2px;border-radius:0 0 0 3px}
+  .corner-br{bottom:10%;right:6%;border-width:0 2px 2px 0;border-radius:0 0 3px 0}
+
+  /* FORMAT PILL */
+  .fmt-pill{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--muted);margin-bottom:10px}
+  .fmt-pill.detected{border-color:var(--accent);color:var(--accentL)}
+  .fmt-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .fmt-pill.detected .fmt-dot{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+
+  /* BUTTONS */
+  .btn{width:100%;padding:13px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s,transform .1s}
+  .btn:active{opacity:.8;transform:scale(.99)}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+  .btn-success{background:var(--green);color:#fff}
+  .btn-danger{background:var(--red);color:#fff}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .row{display:flex;gap:10px}
+  .row .btn{flex:1;margin-bottom:0}
+
+  /* FORM */
+  .section-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:14px 0 6px;display:flex;align-items:center;gap:6px}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+  .fields{background:var(--bg2);border-radius:12px;border:1px solid var(--border);margin-bottom:12px;overflow:hidden}
+  .field-row{display:flex;align-items:center;border-bottom:1px solid var(--border);padding:9px 14px;gap:10px}
+  .field-row:last-child{border-bottom:none}
+  .field-row.highlight{background:rgba(74,124,244,.07)}
+  .field-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;min-width:84px;flex-shrink:0}
+  .field-input{flex:1;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:14px;outline:none}
+  .field-input::placeholder{color:var(--bg3);font-size:13px;font-family:-apple-system,sans-serif}
+  .field-badge{font-size:11px;background:var(--bg3);color:var(--accent);padding:2px 8px;border-radius:4px;font-family:var(--mono);white-space:nowrap}
+
+  /* STATUS */
+  .status{border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;display:flex;align-items:center;gap:10px;line-height:1.4}
+  .status.info{background:#1a2340;border:1px solid #2a3a60;color:#8ab0f8}
+  .status.success{background:#0f2b1b;border:1px solid #166534;color:var(--green)}
+  .status.error{background:#2b0f0f;border:1px solid #7f1d1d;color:var(--red)}
+  .status.warning{background:#2a1e00;border:1px solid #78350f;color:var(--orange)}
+  .status svg{flex-shrink:0;width:16px;height:16px}
+
+  /* PROGRESS */
+  .progress-bar{height:3px;background:var(--bg3);border-radius:2px;margin:4px 0 10px;overflow:hidden}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s}
+
+  /* RECORDS */
+  .record-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .record-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .record-pn{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent)}
+  .record-qty{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text)}
+  .record-qty span{font-size:11px;color:var(--muted);font-weight:400}
+  .record-meta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+  .record-synced{color:var(--green)}
+  .record-pending{color:var(--orange)}
+  .fmt-tag{font-size:10px;background:var(--bg3);border:1px solid var(--border);color:var(--muted);padding:1px 6px;border-radius:4px}
+
+  /* CONFIG */
+  .config-section{margin-bottom:20px}
+  .config-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px}
+  .config-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .config-row{padding:12px 14px;border-bottom:1px solid var(--border)}
+  .config-row:last-child{border-bottom:none}
+  .config-row label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+  .config-row input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none}
+  .config-row input:focus{border-color:var(--accent)}
+  .config-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+
+  .counter-badge{background:var(--accent);color:#fff;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:700}
+  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* FORMAT FORMATS GUIDE */
+  .fmt-guide{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  .fmt-guide-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .fmt-item{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)}
+  .fmt-item:last-child{border-bottom:none}
+  .fmt-color{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .fmt-name{font-size:12px;color:var(--text);font-weight:500;min-width:100px}
+  .fmt-desc{font-size:11px;color:var(--muted)}
+
+  /* Sync indicator */
+  .sync-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .sync-stats{font-size:12px;color:var(--muted)}
+  .sync-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .sync-btn:hover{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 18 18"><rect x="2" y="4" width="2" height="10" rx=".5"/><rect x="5.5" y="4" width="1" height="10" rx=".5"/><rect x="8" y="4" width="3" height="10" rx=".5"/><rect x="12.5" y="4" width="1" height="10" rx=".5"/><rect x="15" y="4" width="1" height="10" rx=".5"/></svg>
+    </div>
+    <div>
+      <div class="logo-text">DAYCO</div>
+      <div class="logo-sub">Scanner de inventario</div>
+    </div>
+  </div>
+  <button class="auth-btn" id="authBtn" onclick="handleAuth()">Conectar</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('scan')">Escanear</div>
+  <div class="tab" onclick="switchTab('history')">Registros <span class="counter-badge" id="countBadge">0</span></div>
+  <div class="tab" onclick="switchTab('config')">Config</div>
+</div>
+
+<!-- ═══════════════════════ SCAN PAGE ═══════════════════════ -->
+<div id="scanPage" class="page active">
+
+  <div id="statusBanner" class="status info" style="display:none"></div>
+
+  <div class="camera-box" id="cameraBox">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div class="scan-overlay" id="scanOverlay" style="display:none">
+      <div class="scan-line"></div>
+      <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+    </div>
+    <div class="camera-placeholder" id="cameraPlaceholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <circle cx="12" cy="13" r="3"/>
+      </svg>
+      <span style="font-size:13px">Toca para activar la cámara</span>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="fmt-pill" id="fmtPill">
+      <div class="fmt-dot"></div>
+      <span id="fmtLabel">Formato no detectado</span>
+    </div>
+    <div class="progress-bar" id="progressBar" style="display:none;flex:1;margin-left:10px;margin-bottom:0"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  </div>
+
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn btn-primary" id="scanBtn" onclick="startScan()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4M15 3h4a2 2 0 012 2v4M21 15v4a2 2 0 01-2 2h-4"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+      Escanear etiqueta
+    </button>
+    <button class="btn btn-secondary" id="stopBtn" onclick="stopScan()" style="display:none;flex:0 0 auto;width:auto;padding:13px 18px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- ── CAMPOS UNIVERSALES ── -->
+  <div class="section-label">Identificación del producto</div>
+  <div class="fields">
+    <div class="field-row highlight">
+      <span class="field-label">Part No.</span>
+      <input class="field-input" id="f_partno" placeholder="ej. 2310K12DYN" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Product No.</span>
+      <input class="field-input" id="f_productno" placeholder="ej. D84-1000-6122310" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Descripción</span>
+      <input class="field-input" id="f_desc" placeholder="ej. POLY RIB BELT" type="text">
+    </div>
+  </div>
+
+  <div class="section-label">Cantidad y empaque</div>
+  <div class="fields">
+    <div class="field-row highlight">
+      <span class="field-label">Cantidad</span>
+      <input class="field-input" id="f_qty" placeholder="ej. 20" type="number" inputmode="numeric">
+      <span class="field-badge" id="f_unit_badge">pcs</span>
+    </div>
+    <div class="field-row">
+      <span class="field-label">Packing / Sets</span>
+      <input class="field-input" id="f_packing" placeholder="ej. 08 / SETS" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Total Belts</span>
+      <input class="field-input" id="f_belts" placeholder="ej. 18" type="text">
+    </div>
+  </div>
+
+  <div class="section-label">Trazabilidad</div>
+  <div class="fields">
+    <div class="field-row">
+      <span class="field-label">Batch / Lot</span>
+      <input class="field-input" id="f_batch" placeholder="ej. 29100740..." type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Serial No.</span>
+      <input class="field-input" id="f_serial" placeholder="ej. S076352502" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Scan ID</span>
+      <input class="field-input" id="f_scanid" placeholder="ej. S131026..." type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">PO Number</span>
+      <input class="field-input" id="f_po" placeholder="ej. 000005" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Vendor No.</span>
+      <input class="field-input" id="f_vendor" placeholder="ej. 131026" type="text">
+    </div>
+  </div>
+
+  <div class="section-label">Fechas y referencias</div>
+  <div class="fields">
+    <div class="field-row">
+      <span class="field-label">Date / Fecha</span>
+      <input class="field-input" id="f_date" placeholder="ej. 05/06/21" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Lot Prod.</span>
+      <input class="field-input" id="f_lotprod" placeholder="ej. 11/02/21" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">FK / Folio</span>
+      <input class="field-input" id="f_fk" placeholder="ej. FK2708150" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Customer</span>
+      <input class="field-input" id="f_customer" placeholder="ej. CATERPILLAR" type="text">
+    </div>
+    <div class="field-row">
+      <span class="field-label">Nota</span>
+      <input class="field-input" id="f_note" placeholder="Observaciones..." type="text">
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn btn-secondary" onclick="clearForm()">Limpiar</button>
+    <button class="btn btn-success" id="saveBtn" onclick="saveRecord()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Guardar
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ HISTORY PAGE ═══════════════════════ -->
+<div id="historyPage" class="page">
+  <div class="sync-row">
+    <div>
+      <div style="font-size:15px;font-weight:600">Registros</div>
+      <div class="sync-stats" id="syncStatus">Sin registros aún</div>
+    </div>
+    <button class="sync-btn" onclick="syncAll()" id="syncBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+      Sincronizar
+    </button>
+  </div>
+  <div id="recordsList"></div>
+  <div id="emptyHistory" style="text-align:center;padding:40px 20px;color:var(--muted)">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:10px;opacity:.3"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <p style="font-size:14px">Escanea tu primera etiqueta</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CONFIG PAGE ═══════════════════════ -->
+<div id="configPage" class="page">
+
+  <div class="config-section">
+    <div class="config-title">Formatos de etiqueta soportados</div>
+    <div class="fmt-guide">
+      <div class="fmt-guide-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        5 formatos detectados automáticamente
+      </div>
+      <div class="fmt-item"><div class="fmt-color" style="background:#4a7cf4"></div><div class="fmt-name">DAYCO Guiyang</div><div class="fmt-desc">FK + D84-xxx · China</div></div>
+      <div class="fmt-item"><div class="fmt-color" style="background:#22c55e"></div><div class="fmt-name">AIAG Caterpillar</div><div class="fmt-desc">Cust. P/N S/N · USA</div></div>
+      <div class="fmt-item"><div class="fmt-color" style="background:#f59e0b"></div><div class="fmt-name">AIAG Córdoba</div><div class="fmt-desc">Etiquetas (P)(Q)(K)(V)(S)</div></div>
+      <div class="fmt-item"><div class="fmt-color" style="background:#a855f7"></div><div class="fmt-name">ODETTE Chieti</div><div class="fmt-desc">Cod.Componente · Italiano</div></div>
+      <div class="fmt-item"><div class="fmt-color" style="background:#ef4444"></div><div class="fmt-name">DAYCO China/Suzhou</div><div class="fmt-desc">零件编号 · Charge Num</div></div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">Cuenta Microsoft</div>
+    <div class="config-card">
+      <div class="config-row">
+        <label>Client ID (Azure App Registration)</label>
+        <input type="text" id="cfg_clientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" oninput="saveConfig()">
+      </div>
+      <div class="config-row">
+        <label>Tenant ID</label>
+        <input type="text" id="cfg_tenantId" placeholder="common  (o tu Tenant ID específico)" oninput="saveConfig()">
+      </div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">Destino OneDrive / SharePoint</div>
+    <div class="config-card">
+      <div class="config-row">
+        <label>Ruta del archivo Excel</label>
+        <input type="text" id="cfg_filePath" placeholder="/Inventarios/DAYCO_Conteo.xlsx" oninput="saveConfig()">
+        <div class="config-hint">Se crea automáticamente si no existe.</div>
+      </div>
+      <div class="config-row">
+        <label>Nombre de la hoja</label>
+        <input type="text" id="cfg_sheetName" placeholder="Escaneos" oninput="saveConfig()">
+      </div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">Instrucciones Azure (una sola vez)</div>
+    <div class="config-card">
+      <div class="config-row">
+        <div style="font-size:12px;color:var(--muted);line-height:1.8">
+          <b style="color:var(--text)">1.</b> portal.azure.com → Azure AD → Registros de aplicaciones → Nueva<br>
+          <b style="color:var(--text)">2.</b> Tipo: <b style="color:var(--text)">SPA</b> — URI de redirección:<br>
+          <code style="font-size:11px;color:var(--accent);word-break:break-all" id="redirectUri"></code><br>
+          <b style="color:var(--text)">3.</b> Permisos API: <b style="color:var(--text)">Files.ReadWrite</b> (Graph, delegado)<br>
+          <b style="color:var(--text)">4.</b> Copia el Client ID aquí arriba — no necesita secreto
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-secondary" onclick="testConnection()" style="margin-bottom:8px">Probar conexión Graph</button>
+  <button class="btn" style="background:var(--bg3);color:var(--red);border:1px solid var(--red)" onclick="if(confirm('¿Borrar todos los registros locales?'))clearHistory()">Borrar historial local</button>
+</div>
+
+<!-- ═══════════════════════ LIBRARIES ═══════════════════════ -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════
+//  COLUMN DEFINITION — 18 columns covering all 5 formats
+// ══════════════════════════════════════════════════════════
+const COLS = [
+  'Fecha Scan','Hora Scan','Formato',
+  'Part No.','Product No.','Descripción',
+  'Cantidad','Packing/Sets','Total Belts',
+  'Batch/Lot','Serial No.','Scan ID','PO Number','Vendor No.',
+  'Date/Fecha','Lot Prod.','FK/Folio','Customer','Nota'
+];
+
+// ══════════════════════════════════════════════════════════
+//  FORMAT DETECTION ENGINE
+// ══════════════════════════════════════════════════════════
+const FORMATS = {
+  GUIYANG:   { name:'DAYCO Guiyang',     color:'#4a7cf4' },
+  AIAG_CAT:  { name:'AIAG Caterpillar',  color:'#22c55e' },
+  AIAG_COR:  { name:'AIAG Córdoba',      color:'#f59e0b' },
+  ODETTE:    { name:'ODETTE Chieti',     color:'#a855f7' },
+  SUZHOU:    { name:'DAYCO China/Suzhou',color:'#ef4444' },
+  UNKNOWN:   { name:'Formato desconocido',color:'#7a85a0' }
+};
+
+function detectFormat(text) {
+  const t = text.toUpperCase();
+  if (/FK\d{7}/.test(t) || /D84-\d{4}-\d{7}/.test(t))    return 'GUIYANG';
+  if (/AIAG|CATERPILLAR|TOTAL.?BELTS/i.test(t))            return 'AIAG_CAT';
+  if (/\(P\)|\(Q\)|\(K\)|\(V\)|\(S\)|POLY RIB BELT/i.test(t)
+      && !/DAYCO CHINA/i.test(t))                          return 'AIAG_COR';
+  if (/ODETTE|COD\.?\s?COMPONENTE|CINGHIA|NOTA DI SPEDIZ/i.test(t)) return 'ODETTE';
+  if (/DAYCO CHINA|SUP.?ADDRESS|CHARGE.?NUM|零件编号/i.test(t)) return 'SUZHOU';
+  return 'UNKNOWN';
+}
+
+// ══════════════════════════════════════════════════════════
+//  FIELD PARSERS — one per format
+// ══════════════════════════════════════════════════════════
+function parseGuiyang(text) {
+  return {
+    partno:    firstMatch(text, /\b([A-Z0-9]{4,8}K\d{2}[A-Z]+)\b/),
+    productno: firstMatch(text, /\b(D84-\d{4}-\d{7})\b/),
+    desc:      '',
+    qty:       firstMatch(text, /(?:Quantity|数量)[^\d]*(\d+)/i) || firstMatch(text, /\b(20|25|50|80|100)\b/),
+    packing:   firstMatch(text, /(?:Packing)[^\d]*(\d{2})/i),
+    belts:     '',
+    batch:     firstMatch(text, /\b(29\d{16,20})\b/),
+    serial:    '',
+    scanid:    '',
+    po:        '',
+    vendor:    '',
+    date:      firstMatch(text, /(?:Date)[^\d]*(\d{4})/i),
+    lotprod:   '',
+    fk:        firstMatch(text, /(FK\d{7})/i),
+    customer:  'DAYCO GUIYANG'
+  };
+}
+
+function parseAiagCat(text) {
+  return {
+    partno:    firstMatch(text, /P\/N[:\s]*([A-Z0-9\-]+)/i),
+    productno: '',
+    desc:      '',
+    qty:       firstMatch(text, /Qty\s+SETS\s+(\d+)/i),
+    packing:   firstMatch(text, /Qty\s+SETS\s+(\d+)/i) ? 'SETS' : '',
+    belts:     firstMatch(text, /Total\s+Belts[:\s]*(\d+)/i),
+    batch:     firstMatch(text, /(?:E\s+)?(\d{5}\s+\d{4}\s+\d{4})/),
+    serial:    firstMatch(text, /S\/N[:\s]*([A-Z0-9\-]+)/i),
+    scanid:    '',
+    po:        firstMatch(text, /Packer[:\s]*(\d+)/i),
+    vendor:    '',
+    date:      firstMatch(text, /Date[:\s]*([\d\/]+)/i),
+    lotprod:   '',
+    fk:        '',
+    customer:  firstMatch(text, /(?:Cust\.|CATERPILLAR\s+INC\.?)\s*([A-Z\s\.]+)/i) || 'CATERPILLAR'
+  };
+}
+
+function parseAiagCor(text) {
+  return {
+    partno:    firstMatch(text, /(?:PART\s+NUMBER\s*\(P\)|^\s*)([ A-Z0-9]{8,20})(?:\n|$)/im)
+               || firstMatch(text, /\b([A-Z0-9]{8,16})\b/),
+    productno: '',
+    desc:      firstMatch(text, /POLY RIB BELT[^\n]*/i),
+    qty:       firstMatch(text, /QUANTITY\s*\(Q\)[^\d]*(\d+)/i),
+    packing:   '',
+    belts:     '',
+    batch:     firstMatch(text, /LOT\s*\(E\)[^\d]*(\d+)/i),
+    serial:    firstMatch(text, /SERIAL\s+NUMBER\s*\(S\)[:\s]*([A-Z0-9]+)/i),
+    scanid:    firstMatch(text, /SCAN\s+ID\s*\(S\)[:\s]*([A-Z0-9]+)/i),
+    po:        firstMatch(text, /PO\s+NUMBER\s*\(K\)[:\s]*([0-9]+)/i),
+    vendor:    firstMatch(text, /VENDOR\s+NUMBER\s*\(V\)[:\s]*([0-9]+)/i),
+    date:      '',
+    lotprod:   '',
+    fk:        '',
+    customer:  ''
+  };
+}
+
+function parseOdette(text) {
+  return {
+    partno:    firstMatch(text, /(?:CODICE\s+ARTICOLO|COD\.?\s?ARTICOLO)[:\s]*([A-Z0-9]+)/i),
+    productno: firstMatch(text, /(?:COD\.?\s?COMPONENTE|D84\d{11})/i)
+               || firstMatch(text, /\b(D84\d{11})\b/),
+    desc:      firstMatch(text, /CINGHIA/i) ? 'CINGHIA (Correa)' : '',
+    qty:       firstMatch(text, /(?:QUANTIT[AÀ]|QUANTITA)[^\d]*(\d+)/i),
+    packing:   '',
+    belts:     '',
+    batch:     firstMatch(text, /(?:NUMERO\s+DI\s+SERIE|N\.\s?SERIE)[:\s]*([0-9]+)/i),
+    serial:    firstMatch(text, /(?:NUMERO\s+DI\s+SERIE|N\.\s?SERIE)[:\s]*([0-9]+)/i),
+    scanid:    '',
+    po:        '',
+    vendor:    '',
+    date:      firstMatch(text, /(?:DATA)[:\s]*([\d\/]+)/i),
+    lotprod:   firstMatch(text, /N\.\s?LOTTO\s+PROD[:\s]*([\d\/]+)/i),
+    fk:        '',
+    customer:  'DAYCO EUROPE (Chieti)'
+  };
+}
+
+function parseSuzhou(text) {
+  return {
+    partno:    firstMatch(text, /(?:ITEM\s+NUMBER|序号)[:\s]*([A-Z0-9]+)/i)
+               || firstMatch(text, /\b([A-Z0-9]{6,12}[A-Z]\d?)\b/),
+    productno: firstMatch(text, /(?:PART\s+NUMBER|零件编号)[:\s]*([A-Z0-9]+)/i),
+    desc:      firstMatch(text, /(?:DESCRIPTION|名称)[:\s]*([^\n]+)/i),
+    qty:       firstMatch(text, /(?:QUANTITY|数量)[:\s]*(\d+)/i),
+    packing:   '',
+    belts:     '',
+    batch:     firstMatch(text, /(?:SERIAL\s+NUM|序号)[:\s]*([0-9]+)/i),
+    serial:    firstMatch(text, /(?:SERIAL\s+NUM)[:\s]*([0-9]+)/i),
+    scanid:    '',
+    po:        '',
+    vendor:    '',
+    date:      firstMatch(text, /(?:生产日期|DATE)[:\s]*([\d\/]+)/i),
+    lotprod:   firstMatch(text, /CHARGE\s+NUM[:\s]*([0-9]+)/i),
+    fk:        '',
+    customer:  'DAYCO CHINA (Suzhou)'
+  };
+}
+
+function parseBarcode(barcodeText) {
+  const fmt = detectFormat(barcodeText);
+  let fields;
+  switch(fmt) {
+    case 'GUIYANG':  fields = parseGuiyang(barcodeText); break;
+    case 'AIAG_CAT': fields = parseAiagCat(barcodeText); break;
+    case 'AIAG_COR': fields = parseAiagCor(barcodeText); break;
+    case 'ODETTE':   fields = parseOdette(barcodeText); break;
+    case 'SUZHOU':   fields = parseSuzhou(barcodeText); break;
+    default:         fields = genericParse(barcodeText);
+  }
+  return { fmt, fields };
+}
+
+function genericParse(text) {
+  return {
+    partno:  firstMatch(text, /\b([A-Z][A-Z0-9]{5,15})\b/),
+    productno:'', desc:'', qty: firstMatch(text, /\b(\d{1,4})\b/),
+    packing:'', belts:'', batch:'', serial:'', scanid:'',
+    po:'', vendor:'', date:'', lotprod:'', fk:'', customer:''
+  };
+}
+
+function firstMatch(text, re) {
+  if(!text) return '';
+  const m = re.exec(text);
+  return m ? m[1].trim() : '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+let records = JSON.parse(localStorage.getItem('dayco_records') || '[]');
+let config  = JSON.parse(localStorage.getItem('dayco_config')  || '{"clientId":"","tenantId":"common","filePath":"/Inventarios/DAYCO_Conteo.xlsx","sheetName":"Escaneos"}');
+let msalApp = null, msalAccount = null;
+let codeReader = null, scanning = false, stream = null;
+let currentFmt = 'UNKNOWN';
+
+document.getElementById('redirectUri').textContent = window.location.origin + window.location.pathname;
+document.getElementById('cfg_clientId').value = config.clientId || '';
+document.getElementById('cfg_tenantId').value = config.tenantId || '';
+document.getElementById('cfg_filePath').value  = config.filePath  || '';
+document.getElementById('cfg_sheetName').value = config.sheetName || '';
+
+// ══════════════════════════════════════════════════════════
+//  TAB / STATUS
+// ══════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    t.classList.toggle('active',['scan','history','config'][i]===tab);
+  });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(tab+'Page').classList.add('active');
+  if(tab!=='scan') stopScan();
+  if(tab==='history') renderHistory();
+}
+
+function showStatus(msg,type='info') {
+  const el=document.getElementById('statusBanner');
+  const icons={
+    info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+    error:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    warning:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+  };
+  el.className='status '+type;
+  el.innerHTML=(icons[type]||'')+'<span>'+msg+'</span>';
+  el.style.display='flex';
+  if(type==='success') setTimeout(()=>{el.style.display='none';},3500);
+}
+
+// ══════════════════════════════════════════════════════════
+//  FORMAT PILL
+// ══════════════════════════════════════════════════════════
+function setFormat(fmtKey) {
+  currentFmt = fmtKey;
+  const f = FORMATS[fmtKey] || FORMATS.UNKNOWN;
+  const pill = document.getElementById('fmtPill');
+  const label = document.getElementById('fmtLabel');
+  pill.className = 'fmt-pill' + (fmtKey!=='UNKNOWN' ? ' detected' : '');
+  pill.querySelector('.fmt-dot').style.background = f.color;
+  label.textContent = f.name;
+}
+
+// ══════════════════════════════════════════════════════════
+//  CAMERA / SCANNING
+// ══════════════════════════════════════════════════════════
+async function startScan() {
+  if(scanning) return;
+  document.getElementById('cameraPlaceholder').style.display='none';
+  document.getElementById('scanOverlay').style.display='block';
+  document.getElementById('scanBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='flex';
+  document.getElementById('progressBar').style.display='block';
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}
+    });
+    document.getElementById('video').srcObject = stream;
+    scanning = true;
+    if(typeof ZXing!=='undefined') {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      scanLoop();
+    } else {
+      showStatus('Ingresa los datos manualmente (ZXing no cargó).','warning');
+    }
+  } catch(e) {
+    showStatus('Sin acceso a cámara. Permite el permiso en Safari → Ajustes del sitio.','error');
+    stopScan();
+  }
+}
+
+function setProgress(p){ document.getElementById('progressFill').style.width=p+'%'; }
+
+async function scanLoop() {
+  if(!scanning||!codeReader) return;
+  const video=document.getElementById('video');
+  const canvas=document.getElementById('canvas');
+  const ctx=canvas.getContext('2d');
+  const tryDecode=async()=>{
+    if(!scanning) return;
+    try {
+      canvas.width=video.videoWidth||640;
+      canvas.height=video.videoHeight||480;
+      ctx.drawImage(video,0,0);
+      const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const res=await codeReader.decodeFromImageData(imgData);
+      if(res){ handleBarcode(res.getText()); return; }
+    } catch(e){}
+    if(scanning) setTimeout(tryDecode,250);
+  };
+  setTimeout(tryDecode,600);
+}
+
+function handleBarcode(raw) {
+  setProgress(50);
+  const {fmt, fields} = parseBarcode(raw);
+  setFormat(fmt);
+  fillForm(fields);
+  setProgress(100);
+  navigator.vibrate && navigator.vibrate([80,40,80]);
+  showStatus('✓ Etiqueta '+FORMATS[fmt].name+' detectada. Revisa y guarda.','success');
+  setTimeout(()=>{ stopScan(); setProgress(0); document.getElementById('progressBar').style.display='none'; },900);
+}
+
+function stopScan() {
+  scanning=false;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(codeReader){try{codeReader.reset();}catch(e){}codeReader=null;}
+  document.getElementById('video').srcObject=null;
+  document.getElementById('cameraPlaceholder').style.display='flex';
+  document.getElementById('scanOverlay').style.display='none';
+  document.getElementById('scanBtn').style.display='flex';
+  document.getElementById('stopBtn').style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════
+//  FORM HELPERS
+// ══════════════════════════════════════════════════════════
+function fillForm(f) {
+  const set=(id,val)=>{ if(val) document.getElementById(id).value=val; };
+  set('f_partno',   f.partno);
+  set('f_productno',f.productno);
+  set('f_desc',     f.desc);
+  set('f_qty',      f.qty);
+  set('f_packing',  f.packing);
+  set('f_belts',    f.belts);
+  set('f_batch',    f.batch);
+  set('f_serial',   f.serial);
+  set('f_scanid',   f.scanid);
+  set('f_po',       f.po);
+  set('f_vendor',   f.vendor);
+  set('f_date',     f.date);
+  set('f_lotprod',  f.lotprod);
+  set('f_fk',       f.fk);
+  set('f_customer', f.customer);
+}
+
+function clearForm() {
+  ['f_partno','f_productno','f_desc','f_qty','f_packing','f_belts',
+   'f_batch','f_serial','f_scanid','f_po','f_vendor',
+   'f_date','f_lotprod','f_fk','f_customer','f_note'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  setFormat('UNKNOWN');
+  document.getElementById('statusBanner').style.display='none';
+}
+
+function g(id){ return document.getElementById(id).value.trim(); }
+
+function saveRecord() {
+  const partno=g('f_partno'), qty=g('f_qty');
+  if(!partno && !qty){ showStatus('Ingresa al menos Part No. o Cantidad.','error'); return; }
+  const now=new Date();
+  const rec={
+    id: Date.now(),
+    fecha:   now.toLocaleDateString('es-MX'),
+    hora:    now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}),
+    fmt:     currentFmt,
+    partno,
+    productno: g('f_productno'),
+    desc:      g('f_desc'),
+    qty,
+    packing:   g('f_packing'),
+    belts:     g('f_belts'),
+    batch:     g('f_batch'),
+    serial:    g('f_serial'),
+    scanid:    g('f_scanid'),
+    po:        g('f_po'),
+    vendor:    g('f_vendor'),
+    date:      g('f_date'),
+    lotprod:   g('f_lotprod'),
+    fk:        g('f_fk'),
+    customer:  g('f_customer'),
+    note:      g('f_note'),
+    synced: false
+  };
+  records.unshift(rec);
+  localStorage.setItem('dayco_records',JSON.stringify(records));
+  updateCounter();
+  showStatus('Registro guardado.','success');
+  clearForm();
+}
+
+// ══════════════════════════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════════════════════════
+function updateCounter() {
+  document.getElementById('countBadge').textContent=records.length;
+  const pending=records.filter(r=>!r.synced).length;
+  document.getElementById('syncStatus').textContent=
+    records.length+' registros · '+pending+' pendientes';
+}
+
+function renderHistory() {
+  updateCounter();
+  const list=document.getElementById('recordsList');
+  const empty=document.getElementById('emptyHistory');
+  if(!records.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  const fmtColor = k => (FORMATS[k]||FORMATS.UNKNOWN).color;
+  list.innerHTML=records.map(r=>`
+    <div class="record-card">
+      <div class="record-header">
+        <div>
+          <div class="record-pn">${r.partno||r.productno||r.fk||'—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${r.productno||r.desc||''}</div>
+        </div>
+        <div class="record-qty">${r.qty||'?'}<span> pcs</span></div>
+      </div>
+      <div class="record-meta">
+        <span style="display:inline-flex;align-items:center;gap:4px">
+          <span style="width:6px;height:6px;border-radius:50%;background:${fmtColor(r.fmt)};display:inline-block"></span>
+          <span class="fmt-tag">${(FORMATS[r.fmt]||FORMATS.UNKNOWN).name}</span>
+        </span>
+        <span>${r.fecha} ${r.hora}</span>
+        ${r.batch?'<span>Batch: '+r.batch.slice(0,12)+'</span>':''}
+        ${r.fk?'<span>'+r.fk+'</span>':''}
+        <span class="${r.synced?'record-synced':'record-pending'}">${r.synced?'✓ Sync':'⏳ Pendiente'}</span>
+      </div>
+    </div>`).join('');
+}
+
+function clearHistory(){
+  records=[];
+  localStorage.removeItem('dayco_records');
+  updateCounter(); renderHistory();
+}
+
+// ══════════════════════════════════════════════════════════
+//  MICROSOFT GRAPH / ONEDRIVE
+// ══════════════════════════════════════════════════════════
+function saveConfig(){
+  config.clientId  = document.getElementById('cfg_clientId').value.trim();
+  config.tenantId  = document.getElementById('cfg_tenantId').value.trim()||'common';
+  config.filePath  = document.getElementById('cfg_filePath').value.trim();
+  config.sheetName = document.getElementById('cfg_sheetName').value.trim();
+  localStorage.setItem('dayco_config',JSON.stringify(config));
+}
+
+async function handleAuth(){
+  if(!config.clientId){showStatus('Configura tu Client ID en Config primero.','warning');switchTab('config');return;}
+  if(msalAccount){signOut();return;}
+  await initMsal();
+  try{
+    const res=await msalApp.loginPopup({scopes:['Files.ReadWrite','User.Read']});
+    msalAccount=res.account;
+    document.getElementById('authBtn').textContent='✓ '+msalAccount.name.split(' ')[0];
+    document.getElementById('authBtn').className='auth-btn connected';
+    showStatus('Conectado: '+msalAccount.username,'success');
+  }catch(e){showStatus('Auth error: '+(e.message||e),'error');}
+}
+
+function signOut(){
+  if(msalApp&&msalAccount) msalApp.logoutPopup({account:msalAccount});
+  msalAccount=null;
+  document.getElementById('authBtn').textContent='Conectar';
+  document.getElementById('authBtn').className='auth-btn';
+}
+
+async function initMsal(){
+  if(msalApp) return;
+  await loadScript('https://unpkg.com/@azure/msal-browser@3.28.0/dist/index.umd.min.js');
+  const {PublicClientApplication}=msal;
+  msalApp=new PublicClientApplication({
+    auth:{clientId:config.clientId,authority:'https://login.microsoftonline.com/'+config.tenantId,
+          redirectUri:window.location.origin+window.location.pathname},
+    cache:{cacheLocation:'localStorage',storeAuthStateInCookie:true}
+  });
+  await msalApp.initialize();
+  const accs=msalApp.getAllAccounts();
+  if(accs.length){
+    msalAccount=accs[0];
+    document.getElementById('authBtn').textContent='✓ '+msalAccount.name.split(' ')[0];
+    document.getElementById('authBtn').className='auth-btn connected';
+  }
+}
+
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector('script[src="'+src+'"]')){res();return;}
+    const s=document.createElement('script');
+    s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);
+  });
+}
+
+async function getToken(){
+  if(!msalApp||!msalAccount) throw new Error('No autenticado');
+  try{
+    const r=await msalApp.acquireTokenSilent({scopes:['Files.ReadWrite'],account:msalAccount});
+    return r.accessToken;
+  }catch{
+    const r=await msalApp.acquireTokenPopup({scopes:['Files.ReadWrite']});
+    return r.accessToken;
+  }
+}
+
+async function syncAll(){
+  const pending=records.filter(r=>!r.synced);
+  if(!pending.length){showStatus('No hay registros pendientes.','info');return;}
+  if(!msalAccount){showStatus('Conecta tu cuenta Microsoft primero.','warning');return;}
+  if(!config.filePath){showStatus('Configura la ruta del archivo Excel.','warning');switchTab('config');return;}
+  const btn=document.getElementById('syncBtn');
+  btn.innerHTML='<div class="spinner"></div> Sincronizando...';
+  btn.disabled=true;
+  try{
+    const token=await getToken();
+    const fp=config.filePath.startsWith('/')?config.filePath:'/'+config.filePath;
+    const sheet=config.sheetName||'Escaneos';
+    let fileId=await getOrCreateFile(token,fp,sheet);
+    for(const rec of pending){
+      const row=[
+        rec.fecha,rec.hora,
+        (FORMATS[rec.fmt]||FORMATS.UNKNOWN).name,
+        rec.partno,rec.productno,rec.desc,
+        rec.qty,rec.packing,rec.belts,
+        rec.batch,rec.serial,rec.scanid,rec.po,rec.vendor,
+        rec.date,rec.lotprod,rec.fk,rec.customer,rec.note
+      ];
+      await appendRow(token,fileId,sheet,row);
+      rec.synced=true;
+    }
+    localStorage.setItem('dayco_records',JSON.stringify(records));
+    renderHistory();
+    showStatus(pending.length+' registros sincronizados a OneDrive.','success');
+  }catch(e){showStatus('Error sync: '+(e.message||e),'error');}
+  finally{
+    btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg> Sincronizar';
+    btn.disabled=false;
+  }
+}
+
+async function getOrCreateFile(token,fp,sheet){
+  const check=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:'+fp,
+    {headers:{'Authorization':'Bearer '+token}});
+  if(check.ok){const d=await check.json();return d.id;}
+  const content=buildMinimalXlsx();
+  const up=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:'+fp+':/content',
+    {method:'PUT',headers:{'Authorization':'Bearer '+token,
+     'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},body:content});
+  const d=await up.json();
+  await addHeader(token,d.id,sheet);
+  return d.id;
+}
+
+async function addHeader(token,fileId,sheet){
+  try{
+    await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook/worksheets/${encodeURIComponent(sheet)}/range(address='A1:S1')`,
+      {method:'PATCH',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+       body:JSON.stringify({values:[COLS]})});
+  }catch(e){}
+}
+
+async function appendRow(token,fileId,sheet,row){
+  const wsRes=await fetch(
+    `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook/worksheets/${encodeURIComponent(sheet)}/usedRange`,
+    {headers:{'Authorization':'Bearer '+token}});
+  const ws=wsRes.ok?await wsRes.json():{rowCount:1};
+  const next=(ws.rowCount||1)+1;
+  const endCol=String.fromCharCode(64+COLS.length);
+  await fetch(
+    `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/workbook/worksheets/${encodeURIComponent(sheet)}/range(address='A${next}:${endCol}${next}')`,
+    {method:'PATCH',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+     body:JSON.stringify({values:[row]})});
+}
+
+function buildMinimalXlsx(){
+  const enc=new TextEncoder();
+  return enc.encode('PK');
+}
+
+async function testConnection(){
+  if(!config.clientId){showStatus('Configura el Client ID primero.','warning');return;}
+  await initMsal();
+  if(!msalAccount){showStatus('Conecta tu cuenta desde el botón "Conectar".','warning');return;}
+  try{
+    const token=await getToken();
+    const r=await fetch('https://graph.microsoft.com/v1.0/me',{headers:{'Authorization':'Bearer '+token}});
+    const d=await r.json();
+    showStatus('Conexión OK: '+d.displayName+' ('+d.userPrincipalName+')','success');
+  }catch(e){showStatus('Error: '+(e.message||e),'error');}
+}
+
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+updateCounter();
+</script>
+</body>
+</html>
