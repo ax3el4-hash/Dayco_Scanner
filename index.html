@@ -10,14 +10,14 @@
 <title>DAYCO Scanner</title>
 <style>
 :root{
-  --bg:#22abef78;--bg2:#22abef78;--bg3:#2c3347;--border:#3a4260;
+  --bg:#1a1f2e;--bg2:#222838;--bg3:#2c3347;--border:#3a4260;
   --text:#e8eaf0;--muted:#7a85a0;
-  --accent:#125477;--accentL:#d6e2fd;
+  --accent:#4a7cf4;--accentL:#d6e2fd;
   --green:#22c55e;--red:#ef4444;--orange:#f59e0b;--purple:#a855f7;
   --mono:'Courier New',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding-bottom:20px}
+body{background:#1a1f2e;background:var(--bg);color:#e8eaf0;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding-bottom:20px}
 
 /* HEADER */
 .hdr{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
@@ -130,7 +130,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .cfg-row{padding:12px 14px;border-bottom:1px solid var(--border)}
 .cfg-row:last-child{border-bottom:none}
 .cfg-row label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
-.cfg-row input,.cfg-row select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none;-webkit-appearance:none}
+.cfg-row input,.cfg-row select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none;-webkit-appearance:none;appearance:none}
 .cfg-row input:focus,.cfg-row select:focus{border-color:var(--accent)}
 .cfg-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
 
@@ -430,7 +430,50 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 
 <!-- ══════════ SCRIPTS ══════════ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.19.1/index.min.js" crossorigin="anonymous"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  BARCODE ENGINE — sin CDN externo, 100% nativo
+//  1) BarcodeDetector API (Safari iOS16+, Chrome Android)
+//  2) Fallback: entrada manual siempre disponible
+// ═══════════════════════════════════════════════════════════════
+const BC = {
+  detector: null,
+  ready: false,
+
+  async init() {
+    if (typeof BarcodeDetector === 'undefined') {
+      dbgLog('[BC] BarcodeDetector NO disponible en este navegador');
+      return false;
+    }
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      const use = fmts.filter(f => [
+        'code_128','code_39','code_93',
+        'ean_13','ean_8','upc_a','upc_e',
+        'qr_code','data_matrix','pdf417',
+        'itf','codabar','aztec'
+      ].includes(f));
+      this.detector = new BarcodeDetector({ formats: use.length ? use : fmts });
+      this.ready = true;
+      dbgLog('[BC] BarcodeDetector OK (' + use.length + ' formatos)');
+      return true;
+    } catch(e) {
+      dbgLog('[BC] BarcodeDetector init error: ' + e.message);
+      return false;
+    }
+  },
+
+  async detect(canvas) {
+    if (!this.detector) return [];
+    try {
+      const results = await this.detector.detect(canvas);
+      return results.map(r => r.rawValue).filter(Boolean);
+    } catch(e) {
+      return [];
+    }
+  }
+};
+</script>
 <script>
 // ─────────────────────────────────────────────────────────────
 //  COLUMNS  (22 cols — todos los campos + operador + fecha/hora)
@@ -457,7 +500,7 @@ const FMT={
 // ─────────────────────────────────────────────────────────────
 //  CODE-LEVEL CLASSIFIER
 //  Cada código de barras individual se clasifica por su estructura,
-//  no por buscar texto de etiqueta que ZXing nunca devuelve.
+//  no por buscar texto de etiqueta que el escáner nunca devuelve.
 // ─────────────────────────────────────────────────────────────
 function classifyCode(raw){
   const s = raw.trim();
@@ -637,7 +680,7 @@ let records=JSON.parse(localStorage.getItem('dayco_v3')||'[]');
 let config =JSON.parse(localStorage.getItem('dayco_cfg')||
   '{"op":"","clientId":"","tenantId":"common","filePath":"/Inventarios/DAYCO_Conteo.xlsx","sheetName":"Escaneos"}');
 let msalApp=null,msalAcc=null;
-let zxing=null,scanning=false,stream=null;
+let scanning=false,stream=null,scanRafId=null;
 let currentFmt='UNKNOWN';
 let dbgVisible=false;
 
@@ -713,30 +756,43 @@ function toggleDbg(){
 }
 
 // ─────────────────────────────────────────────────────────────
-//  CAMERA / ZXING  — usa decodeFromVideoDevice (más fiable en iOS)
+//  CAMERA — usa BarcodeDetector nativo (Safari iOS16+, Chrome)
+//  Sin dependencias externas. Fallback: entrada manual.
 // ─────────────────────────────────────────────────────────────
 function toggleScan(){if(!scanning)startScan();}
 
+let lastDecoded='';
+let lastDecodedTime=0;
+let scanRafId=null;
+
 async function startScan(){
   if(scanning)return;
-  const ZXingLib=window.ZXing||window.ZXingBrowser||window.zxing;
-  if(!ZXingLib){
-    showSts('Librería ZXing no cargó. Ingresa los datos manualmente o recarga la página.','err');
-    return;
-  }
+
+  // Inicializar BarcodeDetector
+  const bcReady = await BC.init();
+
+  // Abrir cámara
   try{
     stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{exact:'environment'},width:{ideal:1920},height:{ideal:1080}}
+      video:{facingMode:{exact:'environment'},
+             width:{ideal:1920},height:{ideal:1080},
+             focusMode:'continuous'}
     });
   }catch(e1){
     try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:'environment'}
+      });
     }catch(e2){
-      showSts('Sin acceso a cámara: '+e2.message,'err');return;
+      showSts('Sin acceso a cámara: '+e2.message+'. Ingresa los datos manualmente.','err');
+      return;
     }
   }
+
   const video=document.getElementById('video');
   video.srcObject=stream;
+  await video.play().catch(()=>{});
+
   document.getElementById('camPh').style.display='none';
   document.getElementById('scanOv').style.display='block';
   document.getElementById('camWrap').classList.add('cam-active');
@@ -745,71 +801,54 @@ async function startScan(){
   document.getElementById('pbar').style.display='block';
   scanning=true;
 
-  // Usar el constructor correcto según versión de ZXing cargada
-  const ReaderClass=ZXingLib.BrowserMultiFormatReader||
-                    (ZXingLib.Browser&&ZXingLib.Browser.BrowserMultiFormatReader)||
-                    ZXingLib.MultiFormatReader;
-  if(!ReaderClass){showSts('ZXing no compatible con este navegador.','err');stopScan();return;}
+  if(!bcReady){
+    showSts('BarcodeDetector no disponible en este navegador/versión. Cámara activa — ingresa los datos manualmente o actualiza iOS a 16+.','warn');
+    dbgLog('[CAM] modo manual — sin decodificador automático');
+    return; // cámara queda abierta para referencia visual
+  }
 
-  zxing=new ReaderClass();
-  dbgLog('[CAM] iniciada');
+  dbgLog('[CAM] iniciada con BarcodeDetector nativo');
   scanFrame();
 }
 
-let lastDecoded='';
-let lastDecodedTime=0;
-
-function scanFrame(){
+async function scanFrame(){
   if(!scanning)return;
   const video=document.getElementById('video');
   const canvas=document.getElementById('canvas');
-  if(!video.videoWidth){requestAnimationFrame(scanFrame);return;}
+
+  if(!video.videoWidth || video.readyState < 2){
+    scanRafId=requestAnimationFrame(scanFrame);
+    return;
+  }
 
   canvas.width=video.videoWidth;
   canvas.height=video.videoHeight;
-  const ctx=canvas.getContext('2d');
-  ctx.drawImage(video,0,0);
+  canvas.getContext('2d').drawImage(video,0,0);
 
-  // Intentar leer con getImageData → ZXing
-  try{
-    const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
-    const ZXingLib=window.ZXing||window.ZXingBrowser||window.zxing;
-    const LumSrc=ZXingLib.HTMLCanvasElementLuminanceSource||ZXingLib.CanvasLuminanceSource;
-    if(LumSrc && zxing && zxing.decode){
-      const lum=new LumSrc(canvas);
-      const BinBmp=ZXingLib.BinaryBitmap;
-      const Hybrid=ZXingLib.HybridBinarizer;
-      if(BinBmp&&Hybrid){
-        const bmp=new BinBmp(new Hybrid(lum));
-        try{
-          const result=zxing.decode(bmp);
-          if(result){
-            const txt=result.getText();
-            const now=Date.now();
-            if(txt!==lastDecoded||(now-lastDecodedTime)>2000){
-              lastDecoded=txt;lastDecodedTime=now;
-              const added=addToBuffer(txt);
-              if(added){
-                setProgress(80);
-                setTimeout(()=>setProgress(0),600);
-              }
-            }
-          }
-        }catch(e){}
+  // BarcodeDetector puede leer directo del canvas o del video
+  const results = await BC.detect(canvas);
+  for(const txt of results){
+    const now=Date.now();
+    if(txt!==lastDecoded||(now-lastDecodedTime)>1800){
+      lastDecoded=txt;lastDecodedTime=now;
+      const added=addToBuffer(txt);
+      if(added){
+        setProgress(85);
+        navigator.vibrate&&navigator.vibrate(60);
+        setTimeout(()=>setProgress(0),500);
       }
     }
-  }catch(e){}
+  }
 
-  if(scanning) setTimeout(scanFrame,150);
+  if(scanning) scanRafId=setTimeout(scanFrame,200);
 }
 
 function setProgress(p){document.getElementById('pfil').style.width=p+'%';}
 
 function stopScan(){
   scanning=false;
+  if(scanRafId){clearTimeout(scanRafId);cancelAnimationFrame(scanRafId);scanRafId=null;}
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
-  if(zxing&&zxing.reset)try{zxing.reset();}catch(e){}
-  zxing=null;
   document.getElementById('video').srcObject=null;
   document.getElementById('camPh').style.display='flex';
   document.getElementById('scanOv').style.display='none';
