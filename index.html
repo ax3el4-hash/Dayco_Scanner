@@ -431,50 +431,6 @@ body{background:#1a1f2e;background:var(--bg);color:#e8eaf0;color:var(--text);fon
 
 <!-- ══════════ SCRIPTS ══════════ -->
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  BARCODE ENGINE — sin CDN externo, 100% nativo
-//  1) BarcodeDetector API (Safari iOS16+, Chrome Android)
-//  2) Fallback: entrada manual siempre disponible
-// ═══════════════════════════════════════════════════════════════
-const BC = {
-  detector: null,
-  ready: false,
-
-  async init() {
-    if (typeof BarcodeDetector === 'undefined') {
-      dbgLog('[BC] BarcodeDetector NO disponible en este navegador');
-      return false;
-    }
-    try {
-      const fmts = await BarcodeDetector.getSupportedFormats();
-      const use = fmts.filter(f => [
-        'code_128','code_39','code_93',
-        'ean_13','ean_8','upc_a','upc_e',
-        'qr_code','data_matrix','pdf417',
-        'itf','codabar','aztec'
-      ].includes(f));
-      this.detector = new BarcodeDetector({ formats: use.length ? use : fmts });
-      this.ready = true;
-      dbgLog('[BC] BarcodeDetector OK (' + use.length + ' formatos)');
-      return true;
-    } catch(e) {
-      dbgLog('[BC] BarcodeDetector init error: ' + e.message);
-      return false;
-    }
-  },
-
-  async detect(canvas) {
-    if (!this.detector) return [];
-    try {
-      const results = await this.detector.detect(canvas);
-      return results.map(r => r.rawValue).filter(Boolean);
-    } catch(e) {
-      return [];
-    }
-  }
-};
-</script>
-<script>
 // ─────────────────────────────────────────────────────────────
 //  COLUMNS  (22 cols — todos los campos + operador + fecha/hora)
 // ─────────────────────────────────────────────────────────────
@@ -744,6 +700,7 @@ function setFmt(key){
 // ─────────────────────────────────────────────────────────────
 function dbgLog(msg){
   const el=document.getElementById('dbg');
+  if(!el) return;
   const d=document.createElement('div');
   d.className='dbg-entry';
   d.textContent=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' '+msg;
@@ -754,6 +711,48 @@ function toggleDbg(){
   dbgVisible=!dbgVisible;
   document.getElementById('dbg').style.display=dbgVisible?'block':'none';
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  BARCODE ENGINE — sin CDN externo, 100% nativo
+//  BarcodeDetector API (Safari iOS16+, Chrome 83+, Edge 83+)
+//  Fallback: cámara visual + entrada manual
+// ═══════════════════════════════════════════════════════════════
+const BC = {
+  detector: null,
+  ready: false,
+
+  async init() {
+    if (typeof BarcodeDetector === 'undefined') {
+      dbgLog('[BC] BarcodeDetector no disponible — modo manual');
+      return false;
+    }
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      const want = ['code_128','code_39','code_93',
+                    'ean_13','ean_8','upc_a','upc_e',
+                    'qr_code','data_matrix','pdf417',
+                    'itf','codabar','aztec'];
+      const use = fmts.filter(f => want.includes(f));
+      this.detector = new BarcodeDetector({ formats: use.length ? use : fmts });
+      this.ready = true;
+      dbgLog('[BC] OK — ' + (use.length||fmts.length) + ' formatos: ' + (use.length?use:fmts).join(', '));
+      return true;
+    } catch(e) {
+      dbgLog('[BC] Error init: ' + e.message);
+      return false;
+    }
+  },
+
+  async detect(canvas) {
+    if (!this.detector) return [];
+    try {
+      const results = await this.detector.detect(canvas);
+      return results.map(r => r.rawValue).filter(Boolean);
+    } catch(e) {
+      return [];
+    }
+  }
+};
 
 // ─────────────────────────────────────────────────────────────
 //  CAMERA — usa BarcodeDetector nativo (Safari iOS16+, Chrome)
